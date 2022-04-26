@@ -14,6 +14,7 @@ from flask import Flask, jsonify, request
 product_ids = set()
 product_codes = {}
 users = {}
+transactions = {}
 suspicious_users = {}
 
 g = 5274534567267895415184019624415280449825390351329186092
@@ -36,6 +37,7 @@ def generate_product_code(product_id, product_name):
 def generate_user_id(name):
     user_id = str(uuid4()).replace('-', '')
     users[user_id] = name
+    transactions[user_id] = []
     return user_id
 
 class Product():
@@ -66,10 +68,10 @@ class Blockchain():
         return (pow(g, s, p) == h * pow(y, b, p) % p)
 
     def verify_transaction(self, transaction):
-        product_code = transaction['product']['product_code']
-        product_id = product_codes[product_code][0]
+        product_id = transaction['product']['product_code']
+        product_code = product_codes[product_id][0]
         for _ in range(500):
-            if self.zero_knowledge_proof(product_id) == False:
+            if self.zero_knowledge_proof(product_code) == False:
                 print("Invalid Transaction")
                 user_id = transaction['sender']['sender_id']
                 user_name = users[user_id]
@@ -142,6 +144,10 @@ class Blockchain():
             # add the new transaction to the block which will be mined
             if self.verify_transaction(transaction) == -1:
                 return -1
+            
+            transactions[sender_id].append(transaction)
+            transactions[recipient_id].append(transaction)
+
             # self.current_transactions.append(transaction)
             return self.last_block['index'] + 1
         else:
@@ -240,6 +246,21 @@ def new_transaction():
         return jsonify(response), 400
 
     response = {'message': f'Transaction will be added to Block {index}'}
+    return jsonify(response), 201
+
+@app.route('/get_transactions', methods=['POST'])
+def get_transactions():
+    values = request.get_json()
+    required = ['user_id']
+    if not all(k in values for k in required):
+        return 'Missing values', 400
+
+    transaction_list = transactions[values['user_id']]
+    user_transaction_list = []
+    for transaction in transaction_list:
+        user_transaction_list.append(transaction)
+
+    response = { "transactions": user_transaction_list}
     return jsonify(response), 201
 
 @app.route('/chain', methods=['GET'])
